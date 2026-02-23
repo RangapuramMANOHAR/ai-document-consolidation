@@ -4,7 +4,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -66,6 +67,14 @@ _DEFAULT_TEST_PAYLOAD = InvoiceCreateBody(
 def list_invoices(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """List invoices."""
     return invoice_repo.list_(db, skip=skip, limit=limit)
+
+
+@router.delete("/{invoice_id}")
+def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
+    """Delete an invoice by id. Returns 204 on success, 404 if not found."""
+    if not invoice_repo.delete_by_id(db, invoice_id):
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return Response(status_code=204)
 
 
 @router.post("/test")

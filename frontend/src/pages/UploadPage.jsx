@@ -84,57 +84,77 @@ export default function UploadPage() {
   }, [file, navigate])
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto' }}>
-      <h1>Upload</h1>
-      <div
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        style={{
-          border: `2px dashed ${dragOver ? '#06c' : '#ccc'}`,
-          borderRadius: 8,
-          padding: '2rem',
-          textAlign: 'center',
-          marginBottom: '1rem',
-        }}
-      >
-        <input
-          type="file"
-          accept=".pdf,.png,.jpg,.jpeg,.csv,.xlsx,.zip"
-          onChange={handleSelect}
-          style={{ marginBottom: '0.5rem' }}
-        />
-        <p style={{ color: '#666' }}>or drag and drop a file</p>
-        {file && <p><strong>{file.name}</strong></p>}
-      </div>
-      {isUploading && (
-        <div style={{ marginBottom: '1rem' }}>
-          <p>Uploading… {uploadProgress}%</p>
-          <div
-            style={{
-              width: '100%',
-              height: 8,
-              backgroundColor: '#e0e0e0',
-              borderRadius: 4,
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                width: `${uploadProgress}%`,
-                height: '100%',
-                backgroundColor: '#06c',
-                transition: 'width 0.2s ease',
-              }}
-            />
-          </div>
+    <>
+      <style>{`
+        .page-header { margin-bottom: 2rem; }
+        .card--upload { padding: 2rem 2.25rem; }
+        .card--upload .upload-dropzone { margin-bottom: 1rem; }
+        .card--upload .upload-formats-hint { margin: 0 0 1.25rem; }
+        .card--upload .btn-lg { margin-top: 0.25rem; }
+        .btn-lg { padding: 0.9rem 1.75rem; font-size: 1.1rem; }
+        .alert-success { padding: 1rem 1.25rem; border-radius: 8px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; font-weight: 500; font-size: 1rem; margin-top: 1rem; }
+        .alert-error { padding: 1rem 1.25rem; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; font-weight: 500; font-size: 1rem; margin-top: 1rem; }
+      `}</style>
+
+      <header className="page-header">
+        <h1 className="page-title">Upload & Extract</h1>
+        <p className="page-subtitle">
+          Upload invoices as PDF/JPG/PNG/CSV/XLSX or ZIP. We extract key fields and store them for review and analytics.
+        </p>
+      </header>
+
+      <div className="card card--upload">
+        <div
+          className={`upload-dropzone ${dragOver ? 'upload-dropzone--active' : ''}`}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+        >
+          <input
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg,.csv,.xlsx,.zip"
+            onChange={handleSelect}
+            className="upload-input"
+          />
+          <p className="upload-dropzone-hint">or drag and drop a file</p>
+          {file ? <p className="upload-filename"><strong>{file.name}</strong></p> : <p className="empty-state">No file selected</p>}
         </div>
-      )}
-      {uploadComplete && !isUploading && <p style={{ color: '#2e7d32' }}>Upload complete</p>}
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
-      <button onClick={handleUpload} disabled={!file || isUploading}>
-        Upload
-      </button>
-    </div>
+
+        <p className="upload-formats-hint">Supported: PDF, JPG, PNG, CSV, XLSX, ZIP</p>
+
+        <button
+          type="button"
+          className="btn btn-primary btn-lg"
+          onClick={handleUpload}
+          disabled={!file || isUploading}
+        >
+          {isUploading ? (
+            <>
+              <span className="loading-spinner" aria-hidden />
+              Uploading… {uploadProgress}%
+            </>
+          ) : (
+            'Upload'
+          )}
+        </button>
+
+        <div className="upload-status">
+          {isUploading && (
+            <div className="upload-status-item upload-status--progress">
+              <span><span className="loading-spinner" aria-hidden /> Loading… {uploadProgress}%</span>
+              <div className="upload-progress-track">
+                <div className="upload-progress-fill" style={{ width: `${uploadProgress}%` }} />
+              </div>
+            </div>
+          )}
+          {uploadComplete && !isUploading && (
+            <div className="alert-success">Upload complete</div>
+          )}
+          {error && (
+            <div className="alert-error">{error}</div>
+          )}
+        </div>
+      </div>
+    </>
   )
 }

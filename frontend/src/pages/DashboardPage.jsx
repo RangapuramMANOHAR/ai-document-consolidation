@@ -2,6 +2,22 @@ import { useState, useEffect, useCallback } from 'react'
 
 const API_BASE = 'http://127.0.0.1:8000'
 
+const defaultSummary = {
+  total_invoices: 0,
+  by_status: { SUCCESS: 0, PARTIAL: 0, FAILED: 0 },
+  by_currency: { USD: 0, INR: 0, EUR: 0, GBP: 0 },
+  amount_totals: { subtotal_sum: 0, tax_sum: 0, total_sum: 0 },
+  top_vendors: [],
+  daily_totals_last_14_days: [],
+}
+
+function getStatusBadgeClass(status) {
+  if (status === 'SUCCESS') return 'dashboard-badge dashboard-badge--success'
+  if (status === 'PARTIAL') return 'dashboard-badge dashboard-badge--partial'
+  if (status === 'FAILED') return 'dashboard-badge dashboard-badge--failed'
+  return 'dashboard-badge'
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -26,161 +42,165 @@ export default function DashboardPage() {
     fetchSummary()
   }, [fetchSummary])
 
-  if (loading && !data) return <p>Loading…</p>
-  if (error && !data) return <p style={{ color: 'crimson' }}>{error}</p>
-
-  const summary = data || {
-    total_invoices: 0,
-    by_status: { SUCCESS: 0, PARTIAL: 0, FAILED: 0 },
-    by_currency: { USD: 0, INR: 0, EUR: 0, GBP: 0 },
-    amount_totals: { subtotal_sum: 0, tax_sum: 0, total_sum: 0 },
-    top_vendors: [],
-    daily_totals_last_14_days: [],
+  if (loading && !data) {
+    return (
+      <>
+        <h1 className="page-title">KPI Dashboard</h1>
+        <p className="page-subtitle">Invoice analytics across status, currency, vendors, and daily totals.</p>
+        <div className="loading-block">
+          <span className="loading-spinner" aria-hidden />
+          <span>Loading…</span>
+        </div>
+      </>
+    )
   }
+  if (error && !data) return <p className="dashboard-error">{error}</p>
+
+  const summary = data || defaultSummary
   const amt = summary.amount_totals || {}
   const byStatus = summary.by_status || {}
   const byCurrency = summary.by_currency || {}
-  const statusMax = Math.max(1, ...Object.values(byStatus))
-  const currencyMax = Math.max(1, ...Object.values(byCurrency))
-  const daily = summary.daily_totals_last_14_days || []
-  const dailyMax = Math.max(1, ...daily.map((d) => d.total_sum || 0))
-
-  const cardStyle = {
-    padding: '1rem 1.25rem',
-    borderRadius: 8,
-    backgroundColor: '#f8f9fa',
-    border: '1px solid #eee',
-    minWidth: 140,
+  const topVendors = summary.top_vendors || []
+  const dailyTotals = summary.daily_totals_last_14_days || []
+  const formatMoney = (val) => (val != null && val !== '' ? Number(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—')
+  const formatDate = (val) => {
+    if (val == null || val === '') return '—'
+    try {
+      const d = new Date(val)
+      return Number.isNaN(d.getTime()) ? String(val) : d.toLocaleDateString(undefined, { dateStyle: 'medium' })
+    } catch {
+      return String(val)
+    }
   }
+  const hasNoData = summary.total_invoices === 0
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <h1 style={{ margin: 0 }}>Dashboard</h1>
-        <button type="button" onClick={fetchSummary} disabled={loading}>
-          {loading ? 'Loading…' : 'Refresh'}
-        </button>
-      </div>
-      {error && data && <p style={{ color: 'crimson' }}>{error}</p>}
+    <>
+      <style>{`
+        .dashboard-error { color: #dc2626; margin: 0.5rem 0; font-size: 1.05rem; font-weight: 600; }
+        .dashboard-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+        .dashboard-kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+        @media (max-width: 800px) { .dashboard-kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 480px) { .dashboard-kpi-grid { grid-template-columns: 1fr; } }
+        .dashboard-kpi-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem 1.5rem; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+        .dashboard-kpi-label { font-size: 1rem; color: #64748b; margin-bottom: 0.35rem; }
+        .dashboard-kpi-value { font-size: 1.75rem; font-weight: 700; color: #0f172a; }
+        .dashboard-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+        @media (max-width: 700px) { .dashboard-two-col { grid-template-columns: 1fr; } }
+        .dashboard-section-title { font-size: 1.15rem; font-weight: 700; margin: 0 0 0.75rem; color: #334155; }
+        .dashboard-status-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
+        .dashboard-currency-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
+        .dashboard-badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 500; min-width: 4.5rem; text-align: center; }
+        .dashboard-badge--success { background: #dcfce7; color: #166534; }
+        .dashboard-badge--partial { background: #fef3c7; color: #92400e; }
+        .dashboard-badge--failed { background: #fee2e2; color: #991b1b; }
+        .dashboard-table { width: 100%; border-collapse: collapse; font-size: 1rem; }
+        .dashboard-table th, .dashboard-table td { padding: 0.6rem 0.9rem; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        .dashboard-table th { font-weight: 600; color: #475569; background: #f8fafc; }
+        .dashboard-table td.num { text-align: right; }
+        .dashboard-empty { color: #64748b; font-size: 1rem; margin: 0.5rem 0; }
+        .dashboard-empty-state { text-align: center; padding: 2rem 1rem; color: #475569; font-size: 1.1rem; }
+      `}</style>
 
-      <section style={{ marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '1rem', color: '#666', marginBottom: '0.75rem' }}>KPIs</h2>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-          <div style={cardStyle}>
-            <div style={{ fontSize: '0.85rem', color: '#666' }}>Total Invoices</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 600 }}>{summary.total_invoices}</div>
-          </div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: '0.85rem', color: '#666' }}>Total Amount</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 600 }}>{Number(amt.total_sum || 0).toFixed(2)}</div>
-          </div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: '0.85rem', color: '#666' }}>Subtotal Sum</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 600 }}>{Number(amt.subtotal_sum || 0).toFixed(2)}</div>
-          </div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: '0.85rem', color: '#666' }}>Tax Sum</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 600 }}>{Number(amt.tax_sum || 0).toFixed(2)}</div>
-          </div>
+      <h1 className="page-title">KPI Dashboard</h1>
+      <p className="page-subtitle">Invoice analytics across status, currency, vendors, and daily totals.</p>
+
+      {error && data && <p className="dashboard-error">{error}</p>}
+
+      {hasNoData && <p className="dashboard-empty-state">No analytics yet. Upload invoices first.</p>}
+
+      {!hasNoData && <div className="dashboard-kpi-grid">
+        <div className="dashboard-kpi-card">
+          <div className="dashboard-kpi-label">Total Invoices</div>
+          <div className="dashboard-kpi-value">{summary.total_invoices}</div>
         </div>
-      </section>
+        <div className="dashboard-kpi-card">
+          <div className="dashboard-kpi-label">Total Amount</div>
+          <div className="dashboard-kpi-value">{formatMoney(amt.total_sum)}</div>
+        </div>
+        <div className="dashboard-kpi-card">
+          <div className="dashboard-kpi-label">SUCCESS</div>
+          <div className="dashboard-kpi-value">{byStatus.SUCCESS ?? 0}</div>
+        </div>
+        <div className="dashboard-kpi-card">
+          <div className="dashboard-kpi-label">PARTIAL</div>
+          <div className="dashboard-kpi-value">{byStatus.PARTIAL ?? 0}</div>
+        </div>
+      </div>}
 
-      <section style={{ marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '1rem', color: '#666', marginBottom: '0.75rem' }}>By status</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+      {!hasNoData && <div className="dashboard-two-col">
+        <div className="dashboard-card">
+          <h2 className="dashboard-section-title">By Status</h2>
           {['SUCCESS', 'PARTIAL', 'FAILED'].map((key) => (
-            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ width: 80, fontSize: '0.9rem' }}>{key}</span>
-              <div style={{ flex: 1, height: 24, backgroundColor: '#e9ecef', borderRadius: 4, overflow: 'hidden' }}>
-                <div
-                  style={{
-                    width: `${(100 * (byStatus[key] || 0)) / statusMax}%`,
-                    height: '100%',
-                    backgroundColor: key === 'SUCCESS' ? '#2e7d32' : key === 'PARTIAL' ? '#ed6c02' : '#c62828',
-                    transition: 'width 0.3s ease',
-                  }}
-                />
-              </div>
-              <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{byStatus[key] || 0}</span>
+            <div key={key} className="dashboard-status-row">
+              <span className={getStatusBadgeClass(key)}>{key}</span>
+              <span style={{ fontWeight: 500 }}>{byStatus[key] ?? 0}</span>
             </div>
           ))}
         </div>
-      </section>
-
-      <section style={{ marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '1rem', color: '#666', marginBottom: '0.75rem' }}>By currency</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div className="dashboard-card">
+          <h2 className="dashboard-section-title">By Currency</h2>
           {['USD', 'INR', 'EUR', 'GBP'].map((key) => (
-            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ width: 80, fontSize: '0.9rem' }}>{key}</span>
-              <div style={{ flex: 1, height: 24, backgroundColor: '#e9ecef', borderRadius: 4, overflow: 'hidden' }}>
-                <div
-                  style={{
-                    width: `${(100 * (byCurrency[key] || 0)) / currencyMax}%`,
-                    height: '100%',
-                    backgroundColor: '#1976d2',
-                    transition: 'width 0.3s ease',
-                  }}
-                />
-              </div>
-              <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{byCurrency[key] || 0}</span>
+            <div key={key} className="dashboard-currency-row">
+              <span style={{ minWidth: '3rem' }}>{key}</span>
+              <span style={{ fontWeight: 500 }}>{byCurrency[key] ?? 0}</span>
             </div>
           ))}
         </div>
-      </section>
+      </div>}
 
-      <section style={{ marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '1rem', color: '#666', marginBottom: '0.75rem' }}>Daily totals (last 14 days)</h2>
-        {daily.length === 0 ? (
-          <p style={{ color: '#666', fontSize: '0.9rem' }}>No data</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {daily.map((d) => (
-              <div key={d.date} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <span style={{ width: 100, fontSize: '0.9rem' }}>{d.date}</span>
-                <div style={{ flex: 1, height: 20, backgroundColor: '#e9ecef', borderRadius: 4, overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      width: `${(100 * (d.total_sum || 0)) / dailyMax}%`,
-                      height: '100%',
-                      backgroundColor: '#7b1fa2',
-                      transition: 'width 0.3s ease',
-                    }}
-                  />
-                </div>
-                <span style={{ fontSize: '0.9rem' }}>{Number(d.total_sum || 0).toFixed(2)}</span>
-                <span style={{ fontSize: '0.85rem', color: '#666' }}>({d.count})</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h2 style={{ fontSize: '1rem', color: '#666', marginBottom: '0.75rem' }}>Top vendors</h2>
-        {!summary.top_vendors || summary.top_vendors.length === 0 ? (
-          <p style={{ color: '#666', fontSize: '0.9rem' }}>No data</p>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={{ border: '1px solid #ccc', padding: '0.5rem', textAlign: 'left' }}>vendor_name</th>
-                <th style={{ border: '1px solid #ccc', padding: '0.5rem', textAlign: 'right' }}>count</th>
-                <th style={{ border: '1px solid #ccc', padding: '0.5rem', textAlign: 'right' }}>total_sum</th>
-              </tr>
-            </thead>
-            <tbody>
-              {summary.top_vendors.map((row, i) => (
-                <tr key={i}>
-                  <td style={{ border: '1px solid #ccc', padding: '0.5rem' }}>{row.vendor_name}</td>
-                  <td style={{ border: '1px solid #ccc', padding: '0.5rem', textAlign: 'right' }}>{row.count}</td>
-                  <td style={{ border: '1px solid #ccc', padding: '0.5rem', textAlign: 'right' }}>{Number(row.total_sum || 0).toFixed(2)}</td>
+      {!hasNoData && <div className="dashboard-two-col">
+        <div className="dashboard-card">
+          <h2 className="dashboard-section-title">Top Vendors</h2>
+          {topVendors.length === 0 ? (
+            <p className="dashboard-empty">No data</p>
+          ) : (
+            <table className="dashboard-table">
+              <thead>
+                <tr>
+                  <th>Vendor</th>
+                  <th className="num">Count</th>
+                  <th className="num">Total</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-    </div>
+              </thead>
+              <tbody>
+                {topVendors.map((row, i) => (
+                  <tr key={i}>
+                    <td>{row.vendor_name || '—'}</td>
+                    <td className="num">{row.count}</td>
+                    <td className="num">{formatMoney(row.total_sum)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <div className="dashboard-card">
+          <h2 className="dashboard-section-title">Daily Totals (Last 14 Days)</h2>
+          {dailyTotals.length === 0 ? (
+            <p className="dashboard-empty">No data</p>
+          ) : (
+            <table className="dashboard-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th className="num">Count</th>
+                  <th className="num">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dailyTotals.map((row, i) => (
+                  <tr key={row.date ?? i}>
+                    <td>{formatDate(row.date)}</td>
+                    <td className="num">{row.count}</td>
+                    <td className="num">{formatMoney(row.total_sum)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>}
+    </>
   )
 }
